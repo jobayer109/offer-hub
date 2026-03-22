@@ -1,7 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import * as crypto from 'crypto';
-import * as path from 'path';
-import * as fs from 'fs';
+import { v2 as cloudinary } from 'cloudinary';
 
 const ALLOWED_MIME_TYPES = [
   'image/jpeg',
@@ -9,43 +7,60 @@ const ALLOWED_MIME_TYPES = [
   'image/webp',
   'image/gif',
 ];
-const MAX_FILE_SIZE = 1 * 1024 * 1024; // 2MB
-const UPLOAD_DIR = path.join(__dirname, '../../uploads/offers');
+const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
 
-// Ensure upload directory exists
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 @Injectable()
 export class UploadService {
-  async uploadImage(file: Express.Multer.File) {
-    if (!file) {
-      throw new BadRequestException('No file uploaded');
-    }
+  private async uploadToCloudinary(file: Express.Multer.File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      cloudinary.uploader
+        .upload_stream(
+          {
+            folder: 'offer-hub',
+            resource_type: 'image',
+            transformation: [
+              { width: 800, height: 800, crop: 'limit', quality: 'auto' },
+            ],
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result!.secure_url);
+          },
+        )
+        .end(file.buffer);
+    });
+  }
 
+  private validateFile(file: Express.Multer.File) {
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       throw new BadRequestException(
         'Invalid file type. Allowed: JPEG, PNG, WebP, GIF',
       );
     }
-
     if (file.size > MAX_FILE_SIZE) {
       throw new BadRequestException('File too large. Maximum size is 1MB');
     }
+  }
 
-    const fileExt = file.originalname.split('.').pop();
-    const fileName = `${crypto.randomUUID()}.${fileExt}`;
-    const filePath = path.join(UPLOAD_DIR, fileName);
+  async uploadImage(file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
 
-    fs.writeFileSync(filePath, file.buffer);
-
-    const publicUrl = `/uploads/offers/${fileName}`;
+    this.validateFile(file);
+    const url = await this.uploadToCloudinary(file);
 
     return {
       message: 'Image uploaded successfully',
-      url: publicUrl,
-      path: publicUrl,
+      url,
+      path: url,
     };
   }
 
@@ -61,25 +76,9 @@ export class UploadService {
     const urls: string[] = [];
 
     for (const file of files) {
-      if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-        throw new BadRequestException(
-          `Invalid file type for "${file.originalname}". Allowed: JPEG, PNG, WebP, GIF`,
-        );
-      }
-
-      if (file.size > MAX_FILE_SIZE) {
-        throw new BadRequestException(
-          `File "${file.originalname}" is too large. Maximum size is 1MB`,
-        );
-      }
-
-      const fileExt = file.originalname.split('.').pop();
-      const fileName = `${crypto.randomUUID()}.${fileExt}`;
-      const filePath = path.join(UPLOAD_DIR, fileName);
-
-      fs.writeFileSync(filePath, file.buffer);
-
-      urls.push(`/uploads/offers/${fileName}`);
+      this.validateFile(file);
+      const url = await this.uploadToCloudinary(file);
+      urls.push(url);
     }
 
     return {

@@ -1,7 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import * as dotenv from 'dotenv';
-import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
 
 dotenv.config();
@@ -15,11 +14,6 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api');
-
-  // Serve uploaded files
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
-    prefix: '/uploads/',
-  });
 
   const port = process.env.PORT || 5000;
   await app.listen(port);
