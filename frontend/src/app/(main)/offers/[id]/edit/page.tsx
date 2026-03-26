@@ -34,7 +34,11 @@ import {
   TrendingDown,
   Sparkles,
   Save,
+  ImagePlus,
+  X,
+  Loader2,
 } from 'lucide-react';
+import Image from 'next/image';
 
 const categories = [
   { value: 'Fashion', emoji: '\uD83D\uDC57' },
@@ -56,6 +60,8 @@ export default function EditOfferPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [accessDenied, setAccessDenied] = useState(false);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const {
     register,
@@ -93,6 +99,7 @@ export default function EditOfferPage() {
         }
 
         setOffer(o);
+        setImageUrls(o.image_urls || []);
         reset({
           title: o.title,
           description: o.description,
@@ -123,7 +130,60 @@ export default function EditOfferPage() {
   const discountValid = discountPct >= 15;
   const savings = regularPrice && offerPrice ? regularPrice - offerPrice : 0;
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const remaining = 3 - imageUrls.length;
+    if (remaining <= 0) {
+      setError('Maximum 3 images allowed');
+      return;
+    }
+
+    const filesToUpload = Array.from(files).slice(0, remaining);
+    for (const file of filesToUpload) {
+      if (file.size > 1 * 1024 * 1024) {
+        setError(`"${file.name}" is larger than 1MB`);
+        return;
+      }
+    }
+
+    setUploadingImage(true);
+    setError('');
+
+    try {
+      const token = getToken()!;
+      const formData = new FormData();
+      filesToUpload.forEach((file) => formData.append('images', file));
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/images`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Upload failed');
+
+      setImageUrls((prev) => [...prev, ...data.urls]);
+    } catch (err: any) {
+      setError(err.message || 'Image upload failed');
+    } finally {
+      setUploadingImage(false);
+      e.target.value = '';
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setImageUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const onSubmit = async (data: OfferFormValues) => {
+    if (imageUrls.length === 0) {
+      setError('At least 1 image is required');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
     setSuccess('');
@@ -135,7 +195,7 @@ export default function EditOfferPage() {
         token,
         body: JSON.stringify({
           ...data,
-          image_urls: offer?.image_urls || [],
+          image_urls: imageUrls,
         }),
       });
 
@@ -370,6 +430,61 @@ export default function EditOfferPage() {
                 <AlertCircle className="h-3 w-3" />{errors.target_link.message}
               </p>
             )}
+          </div>
+
+          {/* Images */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <ImagePlus className="h-3.5 w-3.5 text-muted-foreground" />
+              Product Images ({imageUrls.length}/3)
+            </Label>
+
+            <div className="grid grid-cols-3 gap-3">
+              {imageUrls.map((url, index) => (
+                <div key={index} className="relative aspect-square rounded-lg overflow-hidden border bg-muted group">
+                  <Image
+                    src={url.startsWith('http') ? url : `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${url}`}
+                    alt={`Product image ${index + 1}`}
+                    fill
+                    className="object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(index)}
+                    className="absolute top-1 right-1 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                  {index === 0 && (
+                    <span className="absolute bottom-1 left-1 text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
+                      Cover
+                    </span>
+                  )}
+                </div>
+              ))}
+
+              {imageUrls.length < 3 && (
+                <label className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                  {uploadingImage ? (
+                    <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+                  ) : (
+                    <>
+                      <ImagePlus className="h-5 w-5 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground">Add Image</span>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    disabled={uploadingImage}
+                  />
+                </label>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground">Max 1MB per image. First image is the cover.</p>
           </div>
 
           {/* Submit */}
