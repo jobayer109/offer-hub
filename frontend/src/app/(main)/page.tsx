@@ -30,6 +30,7 @@ function HomeContent() {
   const [category, setCategory] = useState('all');
   const [loading, setLoading] = useState(true);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -102,13 +103,14 @@ function HomeContent() {
         {/* Main layout */}
         <div className="flex gap-6">
           {/* Desktop: Left sidebar - Categories */}
-          <aside className="hidden lg:block w-56 shrink-0">
-            <div className="sticky top-[4.5rem] space-y-4 max-h-[calc(100vh-5rem)] overflow-y-auto scrollbar-hide">
-              <div className="bg-card rounded-xl border p-4 shadow-sm">
+          <aside className={`hidden lg:block shrink-0 transition-all duration-300 ${sidebarCollapsed ? 'w-20' : 'w-56'}`}>
+            <div className="sticky top-[4.5rem] space-y-4 max-h-[calc(100vh-5rem)] overflow-y-auto overflow-x-visible scrollbar-hide">
+              <div className={`bg-card rounded-xl border shadow-sm transition-all duration-300 overflow-visible ${sidebarCollapsed ? 'p-2' : 'p-4'}`}>
                 <CategorySidebar
                   selected={category}
                   onSelect={setCategory}
                   offerCounts={offerCounts}
+                  onCollapsedChange={setSidebarCollapsed}
                 />
               </div>
 
